@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Buddy</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/rust.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+  body { display: flex; flex-direction: column; height: 100vh; }
+
+  /* 顶栏 */
+  header {
+    background: #252525; padding: 10px 16px; border-bottom: 1px solid #333;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
+  }
+  header h1 { font-size: 15px; font-weight: 500; color: #ff9040; white-space: nowrap; }
+  header select { background: #333; color: #e0e0e0; border: 1px solid #444;
+    padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; outline: none; }
+  header select:focus { border-color: #ff9040; }
+  header .status { font-size: 11px; color: #888; margin-left: auto; white-space: nowrap; }
+  header .status.ok { color: #4ade80; }
+  header .status.err { color: #f87171; }
+
+  /* 工具栏 */
+  #toolBar {
+    background: #202020; padding: 8px 16px; border-bottom: 1px solid #333;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    font-size: 11px; color: #666; flex-shrink: 0;
+  }
+  button.tool {
+    background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a;
+    padding: 5px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px;
+  }
+  button.tool:hover { background: #383838; border-color: #ff9040; color: #fff; }
+  button.tool:active { transform: scale(0.96); }
+  button.tool.active { background: #ff9040; color: #1a1a1a; border-color: #ff9040; }
+  .divider { width: 1px; height: 20px; background: #333; margin: 0 4px; }
+  button.emo {
+    background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a;
+    padding: 4px 8px; border-radius: 6px; font-size: 11px; cursor: pointer;
+  }
+  button.emo:hover { background: #383838; border-color: #ff9040; }
+  #emoteHint { margin-left: auto; font-size: 11px; min-width: 60px; text-align: right; }
+
+  /* 聊天区 */
+  #chat {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+    scroll-behavior: smooth; position: relative;
+  }
+
+  /* 拖拽高亮（增强版） */
+  #chat.dragover::after {
+    content: attr(data-drag-hint);
+    position: absolute; inset: 0;
+    background: rgba(255, 144, 64, 0.15);
+    border: 3px dashed #ff9040;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #ff9040; font-weight: 500;
+    pointer-events: none; z-index: 10;
+  }
+
+  .msg {
+    max-width: 85%; padding: 10px 14px; border-radius: 12px;
+    line-height: 1.6; word-wrap: break-word; overflow-wrap: break-word;
+    font-size: 14px; animation: fadeIn 0.15s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .msg.user { background: #2d4a7a; align-self: flex-end; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+  .msg.assistant { background: #2a2a2a; align-self: flex-start;
+    border-bottom-left-radius: 4px; border-left: 3px solid #ff9040; }
+  .msg.assistant.streaming:empty::after {
+    content: "▊"; color: #ff9040; animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .msg img { max-width: 100%; max-height: 300px; border-radius: 8px; margin-top: 8px;
+    display: block; cursor: zoom-in; }
+  .meta { font-size: 10px; color: #666; margin-top: 6px;
+    font-family: ui-monospace, Consolas, monospace; }
+
+  /* 代码块 */
+  .msg pre {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    padding: 12px 14px; margin: 10px 0; overflow-x: auto;
+    position: relative; font-size: 13px; line-height: 1.5;
+  }
+  .msg pre code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: transparent; padding: 0; }
+  .msg code:not(pre code) {
+    background: #2a2a2a; padding: 2px 6px; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #ffa860;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    background: #333; color: #aaa; border: 1px solid #444;
+    padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .msg pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: #ff9040; color: #1a1a1a; border-color: #ff9040; }
+
+  /* 底部 */
+  footer {
+    background: #252525; padding: 12px 16px; border-top: 1px solid #333;
+    display: flex; gap: 10px; align-items: flex-end; flex-shrink: 0;
+  }
+  textarea {
+    flex: 1; background: #1a1a1a; color: #e0e0e0; border: 1px solid #444;
+    border-radius: 8px; padding: 10px 14px; font-family: inherit; font-size: 13px;
+    resize: none; height: 42px; min-height: 42px; max-height: 140px;
+    line-height: 20px; outline: none; transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: #ff9040; }
+  button#send {
+    background: #ff9040; color: #1a1a1a; border: none;
+    padding: 0 22px; height: 42px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s; white-space: nowrap;
+  }
+  button#send:hover { background: #ffa860; }
+  button#send.stop { background: #f87171; color: #fff; }
+
+  /* 附件条 */
+  #attachBar {
+    background: #1f1f1f; padding: 8px 16px; border-top: 1px solid #333;
+    display: none; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  #attachBar.visible { display: flex; }
+  .attach-item {
+    position: relative; background: #2a2a2a; border: 1px solid #444;
+    border-radius: 6px; padding: 6px 28px 6px 10px; font-size: 12px; color: #ddd;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .attach-item img { width: 40px; height: 40px; object-fit: cover;
+    border-radius: 4px; border: 1px solid #444; }
+  .attach-item .remove {
+    position: absolute; top: 2px; right: 4px;
+    cursor: pointer; color: #888; font-size: 14px; line-height: 1;
+  }
+  .attach-item .remove:hover { color: #f87171; }
+
+  /* 欢迎页 */
+  .hint { text-align: center; color: #555; font-size: 13px;
+    padding: 40px 20px; line-height: 2; }
+  .hint h2 { font-size: 22px; color: #ff9040;
+    margin-bottom: 14px; font-weight: 500; }
+  .hint kbd {
+    background: #333; padding: 2px 8px; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; color: #bbb;
+  }
+
+  /* 滚动条 */
+  #chat::-webkit-scrollbar { width: 8px; }
+  #chat::-webkit-scrollbar-track { background: #1a1a1a; }
+  #chat::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+  #chat::-webkit-scrollbar-thumb:hover { background: #555; }
+
+  /* 图片放大 */
+  #imgModal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.9); z-index: 1000;
+    cursor: zoom-out; align-items: center; justify-content: center;
+  }
+  #imgModal.visible { display: flex; }
+  #imgModal img { max-width: 95vw; max-height: 95vh; object-fit: contain; }
+
+  /* 历史侧栏 */
+  #historyPanel {
+    position: fixed; top: 0; left: -300px; width: 300px; height: 100vh;
+    background: #1f1f1f; border-right: 1px solid #333; z-index: 500;
+    display: flex; flex-direction: column; transition: left 0.25s ease;
+  }
+  #historyPanel.open { left: 0; }
+  .hist-head {
+    padding: 12px 16px; border-bottom: 1px solid #333;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: #ddd;
+  }
+  #histClose { background: transparent; border: none; color: #888;
+    font-size: 16px; cursor: pointer; }
+  #histClose:hover { color: #fff; }
+  #histList { flex: 1; overflow-y: auto; padding: 8px; }
+  .hist-item {
+    padding: 10px 12px; margin-bottom: 6px; border-radius: 6px;
+    background: #2a2a2a; border: 1px solid #333; cursor: pointer;
+    transition: all 0.15s; position: relative;
+  }
+  .hist-item:hover { background: #333; border-color: #ff9040; }
+  .hist-item.active { border-color: #ff9040; background: #3a2a1a; }
+  .hist-item .title {
+    font-size: 12px; color: #ddd; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .hist-item .time { font-size: 10px; color: #666; margin-top: 4px; }
+  .hist-item .del {
+    position: absolute; top: 6px; right: 8px; color: #666;
+    font-size: 14px; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+  }
+  .hist-item:hover .del { opacity: 1; }
+  .hist-item .del:hover { color: #f87171; }
+
+  /* Toast 提示 */
+  .toast {
+    position: fixed; bottom: 90px; left: 50%;
+    transform: translateX(-50%);
+    background: #ff9040; color: #1a1a1a;
+    padding: 10px 20px; border-radius: 8px;
+    font-size: 13px; font-weight: 500; z-index: 999;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    animation: toastIn 0.25s ease;
+  }
+  .toast.error { background: #f87171; color: #fff; }
+  .toast.success { background: #4ade80; color: #1a1a1a; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- 历史侧栏 -->
+<div id="historyPanel">
+  <div class="hist-head">
+    <span>📜 历史对话</span>
+    <button id="histClose">✕</button>
+  </div>
+  <div id="histList"></div>
+</div>
+
+<header>
+  <h1>🐷 DeepSeek Buddy</h1>
+  <select id="model" title="选择模型">
+    <option value="qwen2.5:3b">qwen2.5:3b (快速)</option>
+    <option value="qwen3:8b">qwen3:8b (推荐)</option>
+    <option value="deepseek-coder-v2:16b">deepseek-coder-v2:16b (代码)</option>
+    <option value="qwen2.5-vl:7b">qwen2.5-vl:7b (视觉)</option>
+    <option value="llava">llava (视觉)</option>
+  </select>
+  <div class="status" id="status">检测中…</div>
+  <button class="tool" id="histBtn">📜 历史</button>
+  <button class="tool" id="clearBtn" style="background:transparent;color:#888;border:1px solid #444;">新对话</button>
+</header>
+
+<div id="toolBar">
+  <span>工具：</span>
+  <button class="tool" id="fileBtn">📎 文件</button>
+  <button class="tool" id="shotBtn">📸 截图</button>
+  <button class="tool" id="pasteBtn">📋 粘贴</button>
+  <input type="file" id="fileInput" multiple style="display:none;">
+  <span class="divider"></span>
+  <button class="tool" id="modeChat">💬 聊天</button>
+  <button class="tool" id="modeCode">💻 编程</button>
+  <button class="tool" id="modeDebug">🐛 调试</button>
+  <button class="tool" id="modeExplain">📖 讲解</button>
+  <span class="divider"></span>
+  <button class="tool" id="searchToggle">🌐 网页搜索</button>
+  <span class="divider"></span>
+  <span>情绪：</span>
+  <button class="emo" data-emo="heart">💗</button>
+  <button class="emo" data-emo="celebrate">🎉</button>
+  <button class="emo" data-emo="dizzy">💫</button>
+  <button class="emo" data-emo="attention">⚠️</button>
+  <button class="emo" data-emo="busy">⚙️</button>
+  <button class="emo" data-emo="idle">🌿</button>
+  <button class="emo" data-emo="sleep">😴</button>
+  <span id="emoteHint"></span>
+</div>
+
+<div id="chat">
+  <div class="hint">
+    <h2>🐷 开始聊天吧</h2>
+    <p>输入消息后按 <kbd>Enter</kbd> 发送</p>
+    <p><kbd>Shift</kbd> + <kbd>Enter</kbd> 换行</p>
+    <p style="margin-top: 18px; color: #666; font-size: 12px;">
+      📎 拖文件 · 📸 截图 · 📋 Ctrl+V 粘图 · 🌐 搜索 · 💻 编程模式
+    </p>
+    <p style="margin-top: 8px; color: #555; font-size: 11px;">
+      快捷命令：Ctrl+K
+    </p>
+  </div>
+</div>
+
+<div id="attachBar"></div>
+
+<footer>
+  <textarea id="input" placeholder="输入消息…（Enter 发送，Shift+Enter 换行，Ctrl+V 粘贴图片）" rows="1"></textarea>
+  <button id="send">发送</button>
+</footer>
+
+<div id="imgModal"><img id="imgModalImg" src=""></div>
+
+<script>
+"use strict";
+
+const API = "/v1";
+
+// ─── DOM ───
+const chatEl     = document.getElementById("chat");
+const inputEl    = document.getElementById("input");
+const sendBtn    = document.getElementById("send");
+const statusEl   = document.getElementById("status");
+const modelEl    = document.getElementById("model");
+const clearBtn   = document.getElementById("clearBtn");
+const hintEl     = document.getElementById("emoteHint");
+const fileBtn    = document.getElementById("fileBtn");
+const fileInput  = document.getElementById("fileInput");
+const shotBtn    = document.getElementById("shotBtn");
+const pasteBtn   = document.getElementById("pasteBtn");
+const attachBar  = document.getElementById("attachBar");
+const imgModal   = document.getElementById("imgModal");
+const imgModalImg= document.getElementById("imgModalImg");
+
+// ─── 状态 ───
+let history       = [];
+let abortCtrl     = null;
+let attachments   = [];
+let currentConvId = null;
+let useSearch     = false;
+let chatMode      = "chat";
+
+// ─── 状态检测 ───
+async function checkStatus() {
+  try {
+    const r = await fetch("/health");
+    if (r.ok) { statusEl.textContent = "● 已连接"; statusEl.className = "status ok"; }
+    else      { statusEl.textContent = "● 无响应"; statusEl.className = "status err"; }
+  } catch (e) {
+    statusEl.textContent = "● 未连接"; statusEl.className = "status err";
+  }
+}
+checkStatus();
+setInterval(checkStatus, 5000);
+
+// ═══════════════════════════════════════════════════════════════════
+//  Markdown + 代码高亮
+// ═══════════════════════════════════════════════════════════════════
+
+function renderMarkdown(text) {
+  const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+  // 提取代码块
+  const blocks = [];
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = blocks.length;
+    blocks.push({ lang: lang || "text", code });
+    return `\u0000CODE${idx}\u0000`;
+  });
+
+  text = esc(text);
+  text = text.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+
+  // 还原代码块
+  text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => {
+    const b = blocks[i];
+    return `<pre><code class="language-${b.lang}">${esc(b.code)}</code></pre>`;
+  });
+
+  // 普通换行（跳过代码块内部）
+  const parts = text.split(/(<pre>[\s\S]*?<\/pre>)/g);
+  return parts.map(p => p.startsWith("<pre>") ? p : p.replace(/\n/g, "<br>")).join("");
+}
+
+function updateMsgText(msgEl, metaEl, text) {
+  while (msgEl.firstChild && msgEl.firstChild !== metaEl) {
+    msgEl.removeChild(msgEl.firstChild);
+  }
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = renderMarkdown(text);
+  msgEl.insertBefore(wrapper, metaEl);
+
+  wrapper.querySelectorAll("pre code").forEach(block => {
+    try { hljs.highlightElement(block); } catch (e) {}
+  });
+
+  wrapper.querySelectorAll("pre").forEach(pre => {
+    const btn = document.createElement("button");
+    btn.className = "copy-btn";
+    btn.textContent = "复制";
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const code = pre.querySelector("code")?.innerText || "";
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = "✓ 已复制";
+        setTimeout(() => { btn.textContent = "复制"; }, 1200);
+      });
+    };
+    pre.appendChild(btn);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════════════════
+
+function showToast(msg, type = "", ms = 2500) {
+  const el = document.createElement("div");
+  el.className = "toast" + (type ? " " + type : "");
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity 0.3s";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 300);
+  }, ms);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  附件
+// ═══════════════════════════════════════════════════════════════════
+
+function addAttachment(att) {
+  attachments.push(att);
+  renderAttachments();
+}
+function removeAttachment(idx) {
+  attachments.splice(idx, 1);
+  renderAttachments();
+}
+function renderAttachments() {
+  if (attachments.length === 0) {
+    attachBar.classList.remove("visible");
+    attachBar.innerHTML = "";
+    return;
+  }
+  attachBar.classList.add("visible");
+  attachBar.innerHTML = "";
+  attachments.forEach((att, idx) => {
+    const el = document.createElement("div");
+    el.className = "attach-item";
+    if (att.type === "image") {
+      el.innerHTML = `<img src="${att.dataUrl}"><span>${escapeHtml(att.name || 'image')}</span><span class="remove">✕</span>`;
+    } else {
+      el.innerHTML = `<span>📄 ${escapeHtml(att.name)}</span><span class="remove">✕</span>`;
+    }
+    el.querySelector(".remove").onclick = () => removeAttachment(idx);
+    attachBar.appendChild(el);
+  });
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+// 文件选择
+fileBtn.onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  for (const f of fileInput.files) await readFile(f);
+  fileInput.value = "";
+};
+
+async function readFile(file, pathPrefix = "") {
+  const name = pathPrefix ? pathPrefix + "/" + file.name : file.name;
+  if (file.type.startsWith("image/")) {
+    const dataUrl = await toDataURL(file);
+    addAttachment({ type: "image", name, dataUrl });
+  } else {
+    const skip = /(node_modules|\.git|dist|build|\.next|target|\.cache|__pycache__)\//;
+    if (skip.test(name)) return;
+    const isCode = /\.(py|js|ts|tsx|jsx|java|c|cpp|h|hpp|cs|go|rs|rb|php|swift|kt|scala|lua|sh|bash|ps1|sql|html|css|scss|sass|vue|svelte|json|yaml|yml|toml|ini|conf|md|txt|log|csv|xml)$/i.test(file.name);
+    if (!isCode && file.type !== "text/plain") return;
+    if (file.size > 200_000) return;
+    const text = await file.text();
+    addAttachment({ type: "text", name, text });
+  }
+}
+
+function toDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  拖拽（增强版）
+// ═══════════════════════════════════════════════════════════════════
+
+let dragCounter = 0;
+
+chatEl.addEventListener("dragenter", e => {
+  e.preventDefault();
+  dragCounter++;
+  updateDragHint(e);
+  chatEl.classList.add("dragover");
+});
+chatEl.addEventListener("dragover", e => {
+  e.preventDefault();
+  updateDragHint(e);
+  chatEl.classList.add("dragover");
+});
+chatEl.addEventListener("dragleave", e => {
+  e.preventDefault();
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    chatEl.classList.remove("dragover");
+  }
+});
+
+function updateDragHint(e) {
+  const items = e.dataTransfer?.items;
+  let n = 0;
+  if (items) {
+    for (const item of items) if (item.kind === "file") n++;
+  }
+  chatEl.dataset.dragHint = n > 0
+    ? `松开以附加 ${n} 个文件`
+    : "松开以附加文件";
+}
+
+chatEl.addEventListener("drop", async e => {
+  e.preventDefault();
+  e.stopPropagation();
+  dragCounter = 0;
+  chatEl.classList.remove("dragover");
+
+  const items = e.dataTransfer.items;
+  const collected = [];
+
+  for (const item of items) {
+    if (item.kind === "file") {
+      const entry = item.webkitGetAsEntry();
+      if (entry) await collectEntry(entry, "", collected);
+    }
+  }
+
+  if (collected.length === 0) {
+    showToast("没有可读取的文件", "error");
+    return;
+  }
+
+  showToast(`加载 ${collected.length} 个文件...`);
+
+  let ok = 0;
+  for (const { file, prefix } of collected) {
+    const before = attachments.length;
+    await readFile(file, prefix);
+    if (attachments.length > before) ok++;
+  }
+
+  if (ok === 0) {
+    showToast("文件被跳过（太大或类型不支持）", "error");
+    return;
+  }
+
+  showToast(`已附加 ${ok} 个文件`, "success");
+
+  // 自动预填 prompt
+  if (!inputEl.value.trim()) {
+    const hasCode = collected.some(({ file }) =>
+      /\.(py|js|ts|tsx|jsx|java|c|cpp|h|hpp|cs|go|rs|rb|php|swift|kt|sh|sql|html|css)$/i.test(file.name)
+    );
+    const hasImage = collected.some(({ file }) =>
+      file.type.startsWith("image/")
+    );
+
+    if (hasCode) {
+      inputEl.value = "解释这些代码，指出可能的问题：";
+    } else if (hasImage) {
+      inputEl.value = "这张图里有什么？";
+    } else {
+      inputEl.value = "解释这些文件的内容：";
+    }
+    inputEl.focus();
+    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+    inputEl.dispatchEvent(new Event("input"));
+  }
+});
+
+async function collectEntry(entry, prefix, out) {
+  if (entry.isFile) {
+    const file = await new Promise(res => entry.file(res));
+    out.push({ file, prefix });
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const entries = await new Promise(res => reader.readEntries(res));
+    const newPrefix = prefix ? prefix + "/" + entry.name : entry.name;
+    for (const child of entries) {
+      await collectEntry(child, newPrefix, out);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  粘贴
+// ═══════════════════════════════════════════════════════════════════
+
+inputEl.addEventListener("paste", async e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (blob) {
+        const dataUrl = await toDataURL(blob);
+        addAttachment({ type: "image", name: "pasted.png", dataUrl });
+        showToast("图片已粘贴", "success");
+      }
+    }
+  }
+});
+pasteBtn.onclick = () => {
+  inputEl.focus();
+  showToast("在输入框里按 Ctrl+V 粘贴剪贴板里的图片");
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  截图
+// ═══════════════════════════════════════════════════════════════════
+
+shotBtn.onclick = async () => {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    showToast("浏览器不支持截图", "error");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "monitor" }, audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(track);
+    const bitmap = await imageCapture.grabFrame();
+    track.stop();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    const dataUrl = canvas.toDataURL("image/png");
+    const name = `shot-${new Date().toISOString().slice(11,19).replace(/:/g,'')}.png`;
+    addAttachment({ type: "image", name, dataUrl });
+    showToast("截图已附加", "success");
+
+    if (!inputEl.value.trim()) {
+      inputEl.value = "这张图里有什么？";
+      inputEl.focus();
+      inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+      inputEl.dispatchEvent(new Event("input"));
+    }
+  } catch (e) {
+    if (e.name !== "AbortError" && e.name !== "NotAllowedError") {
+      console.error(e);
+      showToast("截图失败：" + e.message, "error");
+    }
+  }
+};
+
+// 图片放大
+imgModal.onclick = () => imgModal.classList.remove("visible");
+chatEl.addEventListener("click", e => {
+  if (e.target.tagName === "IMG" && e.target.closest(".msg")) {
+    imgModalImg.src = e.target.src;
+    imgModal.classList.add("visible");
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  模式切换
+// ═══════════════════════════════════════════════════════════════════
+
+const modeBtns = {
+  chat:    document.getElementById("modeChat"),
+  code:    document.getElementById("modeCode"),
+  debug:   document.getElementById("modeDebug"),
+  explain: document.getElementById("modeExplain"),
+};
+function setMode(m) {
+  chatMode = m;
+  Object.entries(modeBtns).forEach(([k, btn]) => btn.classList.toggle("active", k === m));
+  if (m !== "chat" && modelEl.value !== "deepseek-coder-v2:16b") {
+    modelEl.value = "deepseek-coder-v2:16b";
+  }
+}
+Object.entries(modeBtns).forEach(([k, btn]) => btn.onclick = () => setMode(k));
+setMode("chat");
+
+// 网页搜索开关
+document.getElementById("searchToggle").onclick = (e) => {
+  useSearch = !useSearch;
+  e.target.classList.toggle("active", useSearch);
+  e.target.textContent = useSearch ? "🌐 搜索已开" : "🌐 网页搜索";
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  发送消息
+// ═══════════════════════════════════════════════════════════════════
+
+async function send() {
+  const text = inputEl.value.trim();
+  if ((!text && attachments.length === 0) || abortCtrl) return;
+
+  inputEl.value = "";
+  inputEl.style.height = "42px";
+  const hint = chatEl.querySelector(".hint");
+  if (hint) hint.remove();
+
+  // 构造 content
+  const parts = [];
+  for (const att of attachments) {
+    if (att.type === "image") {
+      parts.push({ type: "image_url", image_url: { url: att.dataUrl } });
+    } else {
+      parts.push({ type: "text", text: `【文件：${att.name}】\n\`\`\`\n${att.text}\n\`\`\`` });
+    }
+  }
+  if (text) parts.push({ type: "text", text });
+
+  const userMsg = {
+    role: "user",
+    content: parts.length === 1 && parts[0].type === "text" ? parts[0].text : parts
+  };
+  history.push(userMsg);
+
+  // UI
+  const userEl = document.createElement("div");
+  userEl.className = "msg user";
+  if (text) userEl.appendChild(document.createTextNode(text));
+  for (const att of attachments) {
+    if (att.type === "image") {
+      const img = document.createElement("img");
+      img.src = att.dataUrl;
+      userEl.appendChild(img);
+    } else {
+      const tag = document.createElement("div");
+      tag.style.cssText = "font-size:11px;color:#9cc;margin-top:4px;";
+      tag.textContent = `📄 ${att.name}`;
+      userEl.appendChild(tag);
+    }
+  }
+  chatEl.appendChild(userEl);
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  attachments = [];
+  renderAttachments();
+
+  // assistant 占位
+  const msgEl = addMessage("assistant", "");
+  msgEl.classList.add("streaming");
+  const metaEl = document.createElement("div");
+  metaEl.className = "meta";
+  msgEl.appendChild(metaEl);
+
+  sendBtn.textContent = "停止";
+  sendBtn.classList.add("stop");
+  abortCtrl = new AbortController();
+
+  const startTime = Date.now();
+  let fullText = "";
+  let chunkCount = 0;
+
+  try {
+    const r = await fetch(API + "/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelEl.value,
+        messages: history,
+        stream: true,
+        use_search: useSearch,
+        mode: chatMode,
+      }),
+      signal: abortCtrl.signal
+    });
+
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const obj = JSON.parse(payload);
+          const delta = obj.choices?.[0]?.delta?.content || "";
+          if (delta) {
+            fullText += delta;
+            chunkCount++;
+            updateMsgText(msgEl, metaEl, fullText);
+            chatEl.scrollTop = chatEl.scrollHeight;
+          }
+        } catch (e) {}
+      }
+    }
+
+    const elapsed = (Date.now() - startTime) / 1000;
+    const tps = chunkCount > 0 ? (chunkCount / elapsed).toFixed(1) : "?";
+    metaEl.textContent = `${chunkCount} chunks · ${elapsed.toFixed(1)}s · ${tps} t/s`;
+    msgEl.classList.remove("streaming");
+    history.push({ role: "assistant", content: fullText });
+
+    saveCurrentConversation();
+
+  } catch (e) {
+    msgEl.classList.remove("streaming");
+    if (e.name === "AbortError") {
+      metaEl.textContent = "⏹ 已停止";
+      if (fullText) history.push({ role: "assistant", content: fullText });
+    } else {
+      updateMsgText(msgEl, metaEl, "❌ 错误：" + e.message);
+      metaEl.textContent = "检查桥接终端";
+    }
+  } finally {
+    abortCtrl = null;
+    sendBtn.textContent = "发送";
+    sendBtn.classList.remove("stop");
+    inputEl.focus();
+  }
+}
+
+function addMessage(role, text) {
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  if (text) el.textContent = text;
+  chatEl.appendChild(el);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return el;
+}
+
+// 输入框
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+});
+inputEl.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
+sendBtn.addEventListener("click", () => {
+  if (abortCtrl) abortCtrl.abort();
+  else send();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  历史记录
+// ═══════════════════════════════════════════════════════════════════
+
+const HIST_KEY = "buddy_chat_history";
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveHistory(list) {
+  localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 50)));
+}
+function saveCurrentConversation() {
+  if (history.length === 0) return;
+  const list = loadHistory();
+  const now = Date.now();
+  const first = history.find(m => m.role === "user");
+  const title = typeof first?.content === "string"
+    ? first.content.slice(0, 40)
+    : (Array.isArray(first?.content)
+        ? (first.content.find(c => c.type === "text")?.text || "（图片/文件）").slice(0, 40)
+        : "新对话");
+
+  if (currentConvId) {
+    const idx = list.findIndex(c => c.id === currentConvId);
+    if (idx >= 0) {
+      list[idx].messages = history;
+      list[idx].updated = now;
+      list[idx].title = title;
+    }
+  } else {
+    const id = "conv_" + now;
+    list.unshift({ id, title, messages: history, created: now, updated: now });
+    currentConvId = id;
+  }
+  saveHistory(list);
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = loadHistory();
+  const el = document.getElementById("histList");
+  el.innerHTML = "";
+  if (list.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#555;font-size:12px;padding:30px;">还没有历史对话</div>';
+    return;
+  }
+  for (const conv of list) {
+    const div = document.createElement("div");
+    div.className = "hist-item" + (conv.id === currentConvId ? " active" : "");
+    const ago = Math.floor((Date.now() - conv.updated) / 60000);
+    const timeStr = ago < 1 ? "刚刚" : ago < 60 ? `${ago} 分钟前` : `${Math.floor(ago/60)} 小时前`;
+    div.innerHTML = `
+      <div class="title">${escapeHtml(conv.title)}</div>
+      <div class="time">${timeStr}</div>
+      <span class="del">✕</span>
+    `;
+    div.onclick = (e) => {
+      if (e.target.classList.contains("del")) {
+        e.stopPropagation();
+        deleteConv(conv.id);
+        return;
+      }
+      loadConversation(conv.id);
+    };
+    el.appendChild(div);
+  }
+}
+
+function deleteConv(id) {
+  let list = loadHistory();
+  list = list.filter(c => c.id !== id);
+  saveHistory(list);
+  if (currentConvId === id) currentConvId = null;
+  renderHistory();
+}
+
+function loadConversation(id) {
+  const list = loadHistory();
+  const conv = list.find(c => c.id === id);
+  if (!conv) return;
+  history = conv.messages;
+  currentConvId = id;
+
+  chatEl.innerHTML = "";
+  for (const m of history) {
+    if (m.role === "user") {
+      const el = document.createElement("div");
+      el.className = "msg user";
+      if (typeof m.content === "string") el.textContent = m.content;
+      else if (Array.isArray(m.content)) {
+        for (const part of m.content) {
+          if (part.type === "text") el.appendChild(document.createTextNode(part.text));
+          else if (part.type === "image_url") {
+            const img = document.createElement("img");
+            img.src = part.image_url.url;
+            el.appendChild(img);
+          }
+        }
+      }
+      chatEl.appendChild(el);
+    } else if (m.role === "assistant") {
+      const el = document.createElement("div");
+      el.className = "msg assistant";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      el.appendChild(meta);
+      updateMsgText(el, meta, m.content);
+      chatEl.appendChild(el);
+    }
+  }
+  chatEl.scrollTop = chatEl.scrollHeight;
+  document.getElementById("historyPanel").classList.remove("open");
+}
+
+document.getElementById("histBtn").onclick = () => {
+  renderHistory();
+  document.getElementById("historyPanel").classList.add("open");
+};
+document.getElementById("histClose").onclick = () => {
+  document.getElementById("historyPanel").classList.remove("open");
+};
+
+// 新对话
+clearBtn.onclick = () => {
+  if (abortCtrl) abortCtrl.abort();
+  if (history.length > 0) saveCurrentConversation();
+  history = [];
+  currentConvId = null;
+  attachments = [];
+  renderAttachments();
+  chatEl.innerHTML = `
+    <div class="hint">
+      <h2>🐷 开始聊天吧</h2>
+      <p>输入消息后按 <kbd>Enter</kbd> 发送</p>
+      <p><kbd>Shift</kbd> + <kbd>Enter</kbd> 换行</p>
+      <p style="margin-top: 18px; color: #666; font-size: 12px;">
+        📎 拖文件 · 📸 截图 · 📋 Ctrl+V 粘图 · 🌐 搜索 · 💻 编程模式
+      </p>
+    </div>`;
+  inputEl.focus();
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  情绪按钮
+// ═══════════════════════════════════════════════════════════════════
+
+document.querySelectorAll("button.emo").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const emo = btn.dataset.emo;
+    try {
+      const r = await fetch("/emote?name=" + emo);
+      const j = await r.json();
+      if (j.ok) { hintEl.textContent = "✓ " + emo; hintEl.style.color = "#4ade80"; }
+      else      { hintEl.textContent = "✗ " + (j.error || "失败"); hintEl.style.color = "#f87171"; }
+    } catch (e) {
+      hintEl.textContent = "✗ 未连接"; hintEl.style.color = "#f87171";
+    }
+    setTimeout(() => { hintEl.textContent = ""; }, 2000);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  Ctrl+K 快捷命令
+// ═══════════════════════════════════════════════════════════════════
+
+const quickCmds = [
+  { label: "解释选中的代码", prompt: "解释这段代码做了什么：\n\n```\n" },
+  { label: "重构代码",       prompt: "重构这段代码，提升可读性和性能：\n\n```\n" },
+  { label: "写单元测试",     prompt: "给这段代码写单元测试：\n\n```\n" },
+  { label: "修复 bug",       prompt: "这段代码有 bug，帮我修复：\n\n```\n" },
+  { label: "性能优化",       prompt: "优化这段代码的性能：\n\n```\n" },
+  { label: "加中文注释",     prompt: "给这段代码加中文注释：\n\n```\n" },
+  { label: "转换语言",       prompt: "把这段代码转成 Python：\n\n```\n" },
+];
+
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+    e.preventDefault();
+    const list = quickCmds.map((c, i) => `${i+1}. ${c.label}`).join("\n");
+    const pick = prompt("快捷命令（输入编号）：\n\n" + list);
+    if (pick) {
+      const idx = parseInt(pick) - 1;
+      if (idx >= 0 && idx < quickCmds.length) {
+        setMode("code");
+        inputEl.value = quickCmds[idx].prompt;
+        inputEl.focus();
+        inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+        inputEl.dispatchEvent(new Event("input"));
+      }
+    }
+  }
+});
+
+// 启动
+renderHistory();
+inputEl.focus();
+</script>
+</body>
+</html>

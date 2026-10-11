@@ -1,0 +1,30 @@
+[package]
+name = "buddy-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "buddy-bridge"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serialport = "4"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+bytes = "1"
+open = "5"
+urlencoding = "2"
+scraper = "0.20"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
